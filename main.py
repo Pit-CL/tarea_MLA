@@ -56,7 +56,7 @@ m.add_country_holidays(country_name='Chile')
 m.fit(df)
 
 # Se indica cuáles serán los futures.
-future = m.make_future_dataframe(periods=100)
+future = m.make_future_dataframe(periods=30)
 future.tail()
 
 # Forecast
@@ -73,11 +73,11 @@ fig3 = m.plot(forecast)
 a = add_changepoints_to_plot(fig3.gca(), m, forecast)
 plt.show()
 
-#
-df_cv = cross_validation(m, initial='500 days', period='60 days',
-                         horizon='120 days', parallel="processes")
+# Crossvalidation.
+df_cv = cross_validation(m, initial='516 days', horizon='30 days',
+                         parallel='processes')
 
-df_p = performance_metrics(df_cv)
+df_p = performance_metrics(df_cv, rolling_window=1)
 print(df_p.head())
 
 fig4 = plot_cross_validation_metric(df_cv, metric='mape')
@@ -86,8 +86,9 @@ plt.show()
 # Ahora pruebo varios hiperparámetros para correr el modelo denuevo y
 # compararlo.
 param_grid = {
-    'changepoint_prior_scale': [0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
-                                0.7, 0.9, 1, 1.5, 2, 3, 4, 5, 6, 7, 9, 12, 15]
+    'changepoint_prior_scale': [0.001, 0.01, 0.1, 0.5, 0.6, 0.7, 0.8, 0.9],
+
+    'changepoint_range': [0.8, 0.85, 0.9, 0.95],
 }
 
 # Generate all combinations of parameters
@@ -98,27 +99,27 @@ mapes = []  # Store the mapes for each params here
 # Use cross validation to evaluate all parameters
 for params in all_params:
     m = Prophet(**params).fit(df)  # Fit model with given params
-    df_cv = cross_validation(m, initial='500 days', period='60 days',
-                             horizon='120 days', parallel="processes")
-    df_p = performance_metrics(df_cv)
+    df_cv = cross_validation(m, initial='516 days', horizon='30 days',
+                             parallel='processes')
+    df_p = performance_metrics(df_cv, rolling_window=1)
     mapes.append(df_p['mape'].values[0])
 
 # Find the best parameters
 tuning_results = pd.DataFrame(all_params)
 tuning_results['mae'] = mapes
-print(tuning_results)
+
 
 # Se imprime el mejor parámetro.
 best_params = all_params[np.argmin(mapes)]
 print('El mejor parámetro para changepoint_prior_scale es', best_params)
 
-# Creamos el modelo Prophet con el nuevo hiperparámetro 0.1 y le hacemos un
-# fit.
-m2 = Prophet(changepoint_prior_scale=0.1)
+# Creamos el modelo Prophet con el nuevo hiperparámetro 0.9 y 0.95 y
+# le hacemos un fit.
+m2 = Prophet(changepoint_prior_scale=1.5, changepoint_range=0.95)
 m2.fit(df)
 
 # Se indica cuáles serán los futures y el período hacia adelante.
-future2 = m2.make_future_dataframe(periods=100)
+future2 = m2.make_future_dataframe(periods=30)
 future2.tail()
 
 # Forecast
@@ -135,16 +136,13 @@ fig7 = m2.plot(forecast2)
 a2 = add_changepoints_to_plot(fig7.gca(), m2, forecast2)
 plt.show()
 
-df_cv2 = cross_validation(m2, initial='500 days', period='60 days',
-                          horizon='120 days', parallel="processes")
+df_cv2 = cross_validation(m2, initial='516 days', horizon='30 days',
+                          parallel='processes')
 
-df_p2 = performance_metrics(df_cv2)
-print(df_p2.head())
+df_p2 = performance_metrics(df_cv2, rolling_window=1)
 
 fig8 = plot_cross_validation_metric(df_cv2, metric='mape')
 plt.show()
-
-print('MAE: %.3f' % df_p2['mape'].mean())
 
 
 # XGBOOST
@@ -224,7 +222,7 @@ values = series.values
 data = series_to_supervised(values, n_in=6)
 
 # evaluate
-mape, y, yhat = walk_forward_validation(data, 120)
+mape, y, yhat = walk_forward_validation(data, 30)
 
 # plot expected vs predicted
 pyplot.plot(y, label='Expected')
@@ -232,7 +230,7 @@ pyplot.plot(yhat, label='Predicted')
 pyplot.legend()
 pyplot.show()
 
-print('MAPE de Prophet: %.3f' % df_p2['mape'].mean())
+print('MAPE de Prophet: %.3f' % df_p2['mape'])
 print('MAPE de XGBoost: %.3f' % mape)
 
 # Pronosticando próximo día tomando en cuenta los 10 días anteriores.
@@ -256,5 +254,4 @@ row = values[-4:].flatten()
 
 # make a one-step prediction
 yhat = model.predict(asarray([row]))
-print('Input: %s, Predicted: %.3f' % (row, yhat[0]))
-
+print('Input: %s, Predicted with XGBoost: %.3f' % (row, yhat[0]))
