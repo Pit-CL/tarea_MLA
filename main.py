@@ -46,7 +46,7 @@ dias_especiales = pd.DataFrame({
     'ds': pd.to_datetime(['2018-02-14', '2019-02-14', '2020-02-14',
                           '2021-02-14', '2022-02-14'], format='%Y-%m-%d'),
     'lower_window': -1,
-    'upper_window': 1,
+    'upper_window': 0,
 })
 holidays = dias_especiales
 
@@ -56,7 +56,7 @@ m.add_country_holidays(country_name='Chile')
 m.fit(df)
 
 # Se indica cuáles serán los futures.
-future = m.make_future_dataframe(periods=30)
+future = m.make_future_dataframe(periods=7)
 future.tail()
 
 # Forecast
@@ -74,7 +74,7 @@ a = add_changepoints_to_plot(fig3.gca(), m, forecast)
 plt.show()
 
 # Crossvalidation.
-df_cv = cross_validation(m, initial='516 days', horizon='30 days',
+df_cv = cross_validation(m, initial='120 days', horizon='7 days',
                          parallel='processes')
 
 df_p = performance_metrics(df_cv, rolling_window=1)
@@ -86,9 +86,9 @@ plt.show()
 # Ahora pruebo varios hiperparámetros para correr el modelo denuevo y
 # compararlo.
 param_grid = {
-    'changepoint_prior_scale': [0.001, 0.01, 0.1, 0.5, 0.6, 0.7, 0.8, 0.9],
+    'changepoint_prior_scale': [0.5, 0.8, 1, 2, 3, 4, 5, 6],  #, 0.6, 0.7, 0.8, 0.9],
 
-    'changepoint_range': [0.8, 0.85, 0.9, 0.95],
+    'changepoint_range': [0.9, 0.95, 0.99],
 }
 
 # Generate all combinations of parameters
@@ -99,7 +99,7 @@ mapes = []  # Store the mapes for each params here
 # Use cross validation to evaluate all parameters
 for params in all_params:
     m = Prophet(**params).fit(df)  # Fit model with given params
-    df_cv = cross_validation(m, initial='516 days', horizon='30 days',
+    df_cv = cross_validation(m, initial='120 days', horizon='7 days',
                              parallel='processes')
     df_p = performance_metrics(df_cv, rolling_window=1)
     mapes.append(df_p['mape'].values[0])
@@ -111,15 +111,16 @@ tuning_results['mae'] = mapes
 
 # Se imprime el mejor parámetro.
 best_params = all_params[np.argmin(mapes)]
-print('El mejor parámetro para changepoint_prior_scale es', best_params)
 
 # Creamos el modelo Prophet con el nuevo hiperparámetro 0.9 y 0.95 y
 # le hacemos un fit.
-m2 = Prophet(changepoint_prior_scale=1.5, changepoint_range=0.95)
+m2 = Prophet(changepoint_prior_scale=0.5, changepoint_range=0.9,
+             weekly_seasonality=True, holidays=holidays)
+m2.add_country_holidays(country_name='Chile')
 m2.fit(df)
 
 # Se indica cuáles serán los futures y el período hacia adelante.
-future2 = m2.make_future_dataframe(periods=30)
+future2 = m2.make_future_dataframe(periods=7)
 future2.tail()
 
 # Forecast
@@ -136,7 +137,7 @@ fig7 = m2.plot(forecast2)
 a2 = add_changepoints_to_plot(fig7.gca(), m2, forecast2)
 plt.show()
 
-df_cv2 = cross_validation(m2, initial='516 days', horizon='30 days',
+df_cv2 = cross_validation(m2, initial='120 days', horizon='7 days',
                           parallel='processes')
 
 df_p2 = performance_metrics(df_cv2, rolling_window=1)
@@ -144,8 +145,12 @@ df_p2 = performance_metrics(df_cv2, rolling_window=1)
 fig8 = plot_cross_validation_metric(df_cv2, metric='mape')
 plt.show()
 
+print('MAPE de Prophet: %.3f' % df_p2['mape'])
 
-# XGBOOST
+
+###############################################################################
+# XGBoost.
+###############################################################################
 m2 = XGBRegressor()
 
 
@@ -181,7 +186,7 @@ def xgboost_forecast(train, testX):
     trainX, trainy = train[:, :-1], train[:, -1]
     # fit model
     model = XGBRegressor(objective='reg:squarederror', n_estimators=3000,
-                         max_depth=10, booster='gbtree')
+                         max_depth=20, booster='gbtree')
     model.fit(trainX, trainy)
     # make a one-step prediction
     yhat = model.predict(asarray([testX]))
@@ -246,7 +251,7 @@ trainX, trainy = train[:, :-1], train[:, -1]
 
 # fit model
 model = XGBRegressor(objective='reg:squarederror', n_estimators=3000,
-                     max_depth=10, booster='gbtree')
+                     max_depth=20, booster='gbtree')
 model.fit(trainX, trainy)
 
 # construct an input for a new prediction
@@ -255,3 +260,6 @@ row = values[-4:].flatten()
 # make a one-step prediction
 yhat = model.predict(asarray([row]))
 print('Input: %s, Predicted with XGBoost: %.3f' % (row, yhat[0]))
+
+# TODO: Implementar LightGBM
+# TODO: Leer bien sobre changepoint_range=0.90
