@@ -27,12 +27,14 @@ from fbprophet.plot import plot_cross_validation_metric
 import itertools
 import numpy as np
 import seaborn as sns
+import random
+random.seed(1234)
 
 """# IO"""
 
 # Abrimos el archivo.
 
-file_path = '/home/rafaelfp/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/Tarea MLA - Hoja 2.csv'
+file_path = '/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/Tarea MLA - Hoja 2.csv'
 df = pd.read_csv(file_path)
 
 # Le doy formato a la fecha para poder trabajarla.
@@ -41,10 +43,10 @@ df = df.sort_values(by=['ds'], ascending=True)
 df.reset_index(drop=True, inplace=True)
 
 # Guardo el df ordenado para usarlo en el pronóstico del modelo mejor.
-df.to_csv(r'/home/rafaelfp/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv',
+df.to_csv(r'/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv',
           index=False)
 
-path2 = '/home/rafaelfp/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv'
+path2 = '/content/drive/MyDrive/MDS/MLA/datos2.csv'
 
 """# Estadística descriptiva."""
 
@@ -73,10 +75,8 @@ holidays = dias_especiales
 """## Modelo"""
 
 # Creamos el modelo Prophet y le hacemos un fit.
-m = Prophet(holidays=holidays, weekly_seasonality=True,
-            daily_seasonality=False,
-            yearly_seasonality=False,
-            n_changepoints=10)
+m = Prophet(holidays=holidays, weekly_seasonality=True, daily_seasonality=False,
+            yearly_seasonality=False, n_changepoints=10)
 m.add_country_holidays(country_name='Chile')
 m.fit(df)
 
@@ -88,9 +88,7 @@ future.tail()
 
 # Forecast
 forecast = m.predict(future)
-forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(7)
-
-forecast[['yhat']].sum()
+forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(14)
 
 """### Gráficos componentes del Forecast."""
 
@@ -125,7 +123,9 @@ print('MAE de Prophet: %.3f' % df_p['mae'])
 param_grid = {
     'changepoint_prior_scale': [0.4, 0.5],
 
-    'changepoint_range': [0.95, 0.99]
+    'seasonality_prior_scale': [0.001, 0.01, 0.1, 0.5, 1, 5, 10],
+
+    'holidays_prior_scale': [0.001, 0.01, 0.1, 0.5, 1, 5, 10]
 }
 
 # Generate all combinations of parameters
@@ -135,9 +135,7 @@ maes = []  # Store the maes for each params here
 
 # Use cross validation to evaluate all parameters
 for params in all_params:
-    m = Prophet(**params, yearly_seasonality=False,
-                daily_seasonality=False,
-                weekly_seasonality=True,
+    m = Prophet(**params, yearly_seasonality=False, daily_seasonality=False, weekly_seasonality=True,
                 holidays=holidays, n_changepoints=10)
     m.add_country_holidays(country_name='Chile')
     m.fit(df)  # Fit model with given params
@@ -157,11 +155,10 @@ best_params
 
 """## Modelo 2"""
 
-# Creamos el modelo Prophet con el nuevo hiperparámetro 0.9 y 0.95 y
+# Creamos el modelo Prophet con el nuevo hiperparámetro 0.5 y 0.9 y
 # le hacemos un fit.
-m2 = Prophet(changepoint_prior_scale=0.4, changepoint_range=0.9,
-             weekly_seasonality=True, holidays=holidays,
-             yearly_seasonality=False, daily_seasonality=False,
+m2 = Prophet(changepoint_prior_scale=0.5, changepoint_range=0.9,
+             weekly_seasonality=True, holidays=holidays, yearly_seasonality=False, daily_seasonality=False,
              n_changepoints=10)
 m2.add_country_holidays(country_name='Chile')
 m2.fit(df)
@@ -174,7 +171,7 @@ future2.tail()
 
 # Forecast
 forecast2 = m2.predict(future2)
-forecast2[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(7)
+forecast2[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(14)
 
 """### Gráficos componentes del Forecast."""
 
