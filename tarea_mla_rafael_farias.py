@@ -241,7 +241,8 @@ def xgboost_forecast(train, testX):
     trainX, trainy = train[:, :-1], train[:, -1]
     # fit model
     model = XGBRegressor(objective='reg:squarederror', n_estimators=3000,
-                         max_depth=20, booster='gbtree')
+                         max_depth=20, booster='gbtree', gpu_id=1,
+                         tree_method='gpu_hist')
     model.fit(trainX, trainy)
     # make a one-step prediction
     yhat = model.predict(asarray([testX]))
