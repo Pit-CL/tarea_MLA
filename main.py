@@ -9,6 +9,7 @@ from pandas import read_csv
 from pandas import DataFrame
 from pandas import concat
 from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.metrics import mean_absolute_error
 from xgboost import XGBRegressor
 from matplotlib import pyplot
 from fbprophet.diagnostics import performance_metrics, cross_validation
@@ -19,7 +20,7 @@ import seaborn as sns
 
 # Abrimos el archivo.
 
-file_path = '/home/rafaelfp/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/Tarea MLA - Hoja 2.csv'
+file_path = '/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/Tarea MLA - Hoja 2.csv'
 df = pd.read_csv(file_path)
 
 # Le doy formato a la fecha para poder trabajarla.
@@ -28,10 +29,10 @@ df = df.sort_values(by=['ds'], ascending=True)
 df.reset_index(drop=True, inplace=True)
 
 # Guardo el df ordenado para usarlo en el pronóstico del modelo mejor.
-df.to_csv(r'/home/rafaelfp/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv',
+df.to_csv(r'/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv',
           index=False)
 
-path2 = '/home/rafaelfp/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv'
+path2 = '/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv'
 
 # Graficamos los datos.
 graf = sns.histplot(df, kde='true')
@@ -186,7 +187,7 @@ def xgboost_forecast(train, testX):
     trainX, trainy = train[:, :-1], train[:, -1]
     # fit model
     model = XGBRegressor(objective='reg:squarederror', n_estimators=3000,
-                         max_depth=20, booster='gbtree', gpu_id=0,
+                         max_depth=20, booster='gbtree', gpu_id=1,
                          tree_method='gpu_hist')
     model.fit(trainX, trainy)
     # make a one-step prediction
@@ -214,7 +215,7 @@ def walk_forward_validation(data, n_test):
         # summarize progress
         print('>expected=%.1f, predicted=%.1f' % (testy, yhat))
     # estimate prediction error
-    error = mean_absolute_percentage_error(test[:, -1], predictions)
+    error = mean_absolute_error(test[:, -1], predictions)
     return error, test[:, -1], predictions
 
 
@@ -228,16 +229,13 @@ values = series.values
 data = series_to_supervised(values, n_in=6)
 
 # evaluate
-mape, y, yhat = walk_forward_validation(data, 30)
+mae, y, yhat = walk_forward_validation(data, 30)
 
 # plot expected vs predicted
 pyplot.plot(y, label='Expected')
 pyplot.plot(yhat, label='Predicted')
 pyplot.legend()
 pyplot.show()
-
-print('MAPE de Prophet: %.3f' % df_p2['mape'])
-print('MAPE de XGBoost: %.3f' % mape)
 
 # Pronosticando próximo día tomando en cuenta los 10 días anteriores.
 # load the dataset
@@ -252,8 +250,9 @@ trainX, trainy = train[:, :-1], train[:, -1]
 
 # fit model
 model = XGBRegressor(objective='reg:squarederror', n_estimators=3000,
-                     max_depth=20, booster='gbtree', gpu_id=0,
+                     max_depth=20, booster='gbtree', gpu_id=1,
                      tree_method='gpu_hist')
+
 model.fit(trainX, trainy)
 
 # construct an input for a new prediction
@@ -263,5 +262,6 @@ row = values[-30:].flatten()
 yhat = model.predict(asarray([row]))
 print('Input: %s, Predicted with XGBoost: %.3f' % (row, yhat[0]))
 
-# TODO: Implementar LightGBM
-# TODO: Leer bien sobre changepoint_range=0.90
+print('MAE de Prophet 1: %.3f' % df_p['mae'])
+print('MAE de Prophet 2: %.3f' % df_p2['mae'])
+print('MAE de XGBoost 2: %.3f' % mae)

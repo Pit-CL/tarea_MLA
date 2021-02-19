@@ -46,7 +46,7 @@ df.reset_index(drop=True, inplace=True)
 df.to_csv(r'/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv',
           index=False)
 
-path2 = '/content/drive/MyDrive/MDS/MLA/datos2.csv'
+path2 = '/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv'
 
 """# Estadística descriptiva."""
 
@@ -155,11 +155,13 @@ best_params
 
 """## Modelo 2"""
 
-# Creamos el modelo Prophet con el nuevo hiperparámetro 0.5 y 0.9 y
+# Creamos el modelo Prophet con los nuevos hiperparámetros.
 # le hacemos un fit.
-m2 = Prophet(changepoint_prior_scale=0.5, changepoint_range=0.9,
-             weekly_seasonality=True, holidays=holidays, yearly_seasonality=False, daily_seasonality=False,
-             n_changepoints=10)
+m2 = Prophet(changepoint_prior_scale=0.4, changepoint_range=0.9,
+             seasonality_prior_scale=0.5, holidays_prior_scale=0.1,
+             weekly_seasonality=True, holidays=holidays,
+             yearly_seasonality=False, daily_seasonality=False,
+             n_changepoints=20)
 m2.add_country_holidays(country_name='Chile')
 m2.fit(df)
 
@@ -241,8 +243,7 @@ def xgboost_forecast(train, testX):
     trainX, trainy = train[:, :-1], train[:, -1]
     # fit model
     model = XGBRegressor(objective='reg:squarederror', n_estimators=3000,
-                         max_depth=20, booster='gbtree', gpu_id=1,
-                         tree_method='gpu_hist')
+                         max_depth=20, booster='gbtree', gpu_id=-1)
     model.fit(trainX, trainy)
     # make a one-step prediction
     yhat = model.predict(asarray([testX]))
@@ -304,7 +305,7 @@ trainX, trainy = train[:, :-1], train[:, -1]
 
 # fit model
 model = XGBRegressor(objective='reg:squarederror', n_estimators=3000,
-                     max_depth=20, booster='gbtree')
+                     max_depth=20, booster='gbtree', gpu_id=-1)
 
 model.fit(trainX, trainy)
 
