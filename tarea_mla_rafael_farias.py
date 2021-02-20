@@ -1,4 +1,6 @@
+###############################################################################
 # Importamos las librerías necesarias.
+###############################################################################
 import pandas as pd
 from fbprophet import Prophet
 from fbprophet.plot import add_changepoints_to_plot
@@ -17,9 +19,15 @@ import itertools
 import numpy as np
 import seaborn as sns
 import random
+from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
+from sklearn.model_selection import StratifiedKFold
+
 random.seed(1234)
 
-# Abrimos el archivo.
+###############################################################################
+# IO
+###############################################################################
+
 
 file_path = '/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/Tarea MLA - Hoja 2.csv'
 df = pd.read_csv(file_path)
@@ -30,11 +38,15 @@ df = df.sort_values(by=['ds'], ascending=True)
 df.reset_index(drop=True, inplace=True)
 
 # Guardo el df ordenado para usarlo en el pronóstico del modelo mejor.
-df.to_csv(r'/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv',
-          index=False)
+df.to_csv(
+    r'/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv',
+    index=False)
 
 path2 = '/home/rafaelfarias/Dropbox/Postgrados/MDS/MLA/Tarea MLA/data/datos2.csv'
 
+###############################################################################
+# Estadística descriptiva.
+###############################################################################
 
 # Graficamos los datos.
 graf = sns.histplot(data=df, kde='true')
@@ -46,7 +58,6 @@ plt.show()
 # Describo los datos.
 df.describe()
 
-
 # Le indicamos al modelos los días "importantes"
 dias_especiales = pd.DataFrame({
     'holiday': 'dias_especiales',
@@ -57,6 +68,9 @@ dias_especiales = pd.DataFrame({
 })
 holidays = dias_especiales
 
+###############################################################################
+# Modelo Prophet sin tuning.
+###############################################################################
 
 # Creamos el modelo Prophet y le hacemos un fit.
 m = Prophet(holidays=holidays, weekly_seasonality=True,
@@ -69,22 +83,20 @@ m.fit(df)
 future = m.make_future_dataframe(periods=7)
 future.tail()
 
-
 # Forecast
 forecast = m.predict(future)
 forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(14)
 
-
 # Se grafican los componentes del forecast (trend, weekly, yearly)
 fig2 = m.plot_components(forecast)
+plt.title('Componentes del forecast sin tuning')
 plt.show()
-
 
 # Se grafica cuándo se producen los mayores cambios en la tendencia.
 fig3 = m.plot(forecast)
 a = add_changepoints_to_plot(fig3.gca(), m, forecast)
+plt.title('Pronóstico con changepoints modelo sin tunear')
 plt.show()
-
 
 # Crossvalidation.
 df_cv = cross_validation(m, initial='30 days', horizon='7 days',
@@ -93,14 +105,15 @@ df_cv = cross_validation(m, initial='30 days', horizon='7 days',
 df_p = performance_metrics(df_cv, rolling_window=1)
 
 fig4 = plot_cross_validation_metric(df_cv, metric='mae')
+plt.title('MAE del modelo sin tuning')
 plt.show()
 
-print('MAE de Prophet: %.3f' % df_p['mae'])
-#
-# # """## Hiperparámetros."""
-# #
-# # # Ahora pruebo varios hiperparámetros para correr el modelo denuevo y
-# # # compararlo.
+print('MAE de Prophet sin tuning: %.3f' % df_p['mae'])
+
+###############################################################################
+# Hiperparámetros
+###############################################################################
+
 # param_grid = {
 #     'changepoint_prior_scale': [0.4, 0.5],
 #
@@ -137,8 +150,10 @@ print('MAE de Prophet: %.3f' % df_p['mae'])
 # best_params
 # Darle index para lograr automatizar el paso de más abajo
 
-# Creamos el modelo Prophet con los nuevos hiperparámetros.
-# le hacemos un fit.
+###############################################################################
+# Modelo Prophet con hiperparámetros.
+###############################################################################
+
 m2 = Prophet(changepoint_prior_scale=0.5, changepoint_range=0.9,
              seasonality_prior_scale=0.1, holidays_prior_scale=0.01,
              weekly_seasonality=True, holidays=holidays,
@@ -155,16 +170,17 @@ future2.tail()
 forecast2 = m2.predict(future2)
 forecast2[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(14)
 
-
 forecast2[['yhat_upper']].sum()
 
 # Se grafican los componentes del forecast (trend, weekly, yearly)
 fig6 = m2.plot_components(forecast2)
+plt.title('Componentes del forecast con tuning')
 plt.show()
 
 # Se grafica cuándo se producen los mayores cambios en la tendencia.
 fig7 = m2.plot(forecast2)
 a2 = add_changepoints_to_plot(fig7.gca(), m2, forecast2)
+plt.title('Pronóstico con changepoints incluidos modelo tuneado')
 plt.show()
 
 # Crossvalidation
@@ -174,15 +190,16 @@ df_cv2 = cross_validation(m2, initial='30 days', horizon='7 days',
 df_p2 = performance_metrics(df_cv2, rolling_window=1)
 
 fig8 = plot_cross_validation_metric(df_cv2, metric='mae')
+plt.title('MAE del modelo tuneado')
 plt.show()
 
-print('MAE de Prophet: %.3f' % df_p2['mae'])
+print('MAE de Prophet tuneado: %.3f' % df_p2['mae'])
 
 
 ###############################################################################
-# XGBoost 1.
+# XGBoost 1 sin tuning.
 ###############################################################################
-# transform a time series dataset into a supervised learning dataset
+# Transform a time series dataset into a supervised learning dataset
 def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     n_vars = 1 if type(data) is list else data.shape[1]
     df = DataFrame(data)
@@ -244,7 +261,7 @@ def walk_forward_validation(data, n_test):
     return error, test[:, -1], predictions
 
 
-# forecast monthly selling with xgboost
+# Pronosticando próximo día tomando en cuenta los 30 días anteriores.
 
 # load the dataset
 series2 = read_csv(path2, header=0, index_col=0)
@@ -259,6 +276,7 @@ mae2, y2, yhat2 = walk_forward_validation(data, 30)
 # plot expected vs predicted
 pyplot.plot(y2, label='Expected')
 pyplot.plot(yhat2, label='Predicted')
+pyplot.title('Predicción Modelo XGBoost sin tuning')
 pyplot.legend()
 pyplot.show()
 
@@ -268,52 +286,62 @@ series2 = read_csv(path2, header=0, index_col=0)
 values2 = series2.values
 
 # transform the time series data into supervised learning
-train = series_to_supervised(values2, n_in=30)
+train2 = series_to_supervised(values2, n_in=30)
 
 # split into input and output columns
-trainX, trainy = train[:, :-1], train[:, -1]
+trainX, trainy = train2[:, :-1], train2[:, -1]
 
 # fit model
-model = XGBRegressor(objective='reg:squarederror')
+model2 = XGBRegressor(objective='reg:squarederror')
 
-model.fit(trainX, trainy)
+model2.fit(trainX, trainy)
 
 # construct an input for a new prediction
 row = values2[-30:].flatten()
 
 # make a one-step prediction
-yhat2 = model.predict(asarray([row]))
-print('Input: %s, Predicted with XGBoost: %.3f' % (row, yhat2[0]))
-
+yhat2 = model2.predict(asarray([row]))
+print('Input: %s, Predicted with XGBoost sin tuning: %.3f' % (row, yhat2[0]))
 
 ###############################################################################
-# XGBoost 2.
+# XGBoost 2 con tuning.
 ###############################################################################
-# transform a time series dataset into a supervised learning dataset
-def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
-    n_vars = 1 if type(data) is list else data.shape[1]
-    df = DataFrame(data)
-    cols = list()
-    # input sequence (t-n, ... t-1)
-    for i in range(n_in, 0, -1):
-        cols.append(df.shift(i))
-    # forecast sequence (t, t+1, ... t+n)
-    for i in range(0, n_out):
-        cols.append(df.shift(-i))
-    # put it all together
-    agg = concat(cols, axis=1)
-    # drop rows with NaN values
-    if dropnan:
-        agg.dropna(inplace=True)
-    return agg.values
+# Buscamos los mejores hiperparámetros dentro del listado params.
+xgb = XGBRegressor(objective='reg:squarederror')
+
+params = {
+    'min_child_weight': [5, 10],
+    'gamma': [0.5, 1.5],
+    'subsample': [0.6, 0.8],
+    'colsample_bytree': [0.6, 0.8],
+    'max_depth': [5, 10],
+    'n_estimators': [1000, 3000]
+}
+
+param_comb = 10
+folds = 2
+skf = StratifiedKFold(n_splits=folds, shuffle=True)
+random_search = RandomizedSearchCV(xgb, param_distributions=params,
+                                   n_iter=param_comb,
+                                   scoring='neg_mean_absolute_error',
+                                   n_jobs=4,
+                                   cv=skf.split(trainX, trainy),
+                                   verbose=3)
+
+random_search.fit(trainX, trainy)
+
+print(random_search.cv_results_)
+print('\n Best estimator:')
+print(random_search.best_estimator_)
+print('\n Best normalized gini score for %d-fold search with %d parameter '
+      'combinations:' % (folds, param_comb))
+print(random_search.best_score_ * 2 - 1)
+print('\n Best hyperparameters:')
+print(random_search.best_params_)
+results = pd.DataFrame(random_search.cv_results_)
 
 
-# split a univariate dataset into train/test sets
-def train_test_split(data, n_test):
-    return data[:-n_test, :], data[-n_test:, :]
-
-
-# fit an xgboost model and make a one step prediction
+# Se crea el nuevo modelo con los hiperparámetros encontrados.
 def xgboost_forecast(train, testX):
     # transform list into array
     train = asarray(train)
@@ -321,82 +349,39 @@ def xgboost_forecast(train, testX):
     trainX, trainy = train[:, :-1], train[:, -1]
     # fit model
     model = XGBRegressor(objective='reg:squarederror', n_estimators=3000,
-                         max_depth=40, booster='gbtree', gpu_id=-1)
+                         max_depth=40, booster='gbtree',
+                         TREE_METHOD='gpu_hist')
     model.fit(trainX, trainy)
     # make a one-step prediction
     yhat = model.predict(asarray([testX]))
     return yhat[0]
 
 
-# walk-forward validation for univariate data
-def walk_forward_validation(data, n_test):
-    predictions = list()
-    # split dataset
-    train, test = train_test_split(data, n_test)
-    # seed history with training dataset
-    history = [x for x in train]
-    # step over each time-step in the test set
-    for i in range(len(test)):
-        # split test row into input and output columns
-        testX, testy = test[i, :-1], test[i, -1]
-        # fit model on history and make a prediction
-        yhat = xgboost_forecast(history, testX)
-        # store forecast in list of predictions
-        predictions.append(yhat)
-        # add actual observation to history for the next loop
-        history.append(test[i])
-        # summarize progress
-        print('>expected=%.1f, predicted=%.1f' % (testy, yhat))
-    # estimate prediction error
-    error = mean_absolute_error(test[:, -1], predictions)
-    return error, test[:, -1], predictions
-
-
-# forecast monthly selling with xgboost
-
-# load the dataset
-series = read_csv(path2, header=0, index_col=0)
-values = series.values
+# Graficando.
 
 # transform the time series data into supervised learning
-data = series_to_supervised(values, n_in=6)
-
-# evaluate
+data = series_to_supervised(values2, n_in=6)
 mae, y, yhat = walk_forward_validation(data, 30)
 
 # plot expected vs predicted
 pyplot.plot(y, label='Expected')
 pyplot.plot(yhat, label='Predicted')
+pyplot.title('Predicción Modelo XGBoost tuneado')
 pyplot.legend()
 pyplot.show()
 
-# Pronosticando próximo día tomando en cuenta los 10 días anteriores.
-# load the dataset
-series = read_csv(path2, header=0, index_col=0)
-values = series.values
-
-# transform the time series data into supervised learning
-train = series_to_supervised(values, n_in=30)
-
-# split into input and output columns
-trainX, trainy = train[:, :-1], train[:, -1]
-
-# fit model
-model = XGBRegressor(objective='reg:squarederror', n_estimators=3000,
-                     max_depth=40, booster='gbtree', gpu_id=-1)
-
-model.fit(trainX, trainy)
+# Pronosticando próximo día tomando en cuenta los 30 días anteriores y el mejor
+# modelo encontrado.
 
 # construct an input for a new prediction
-row = values[-30:].flatten()
+row = values2[-30:].flatten()
 
 # make a one-step prediction
-yhat = model.predict(asarray([row]))
-print('Input: %s, Predicted with XGBoost: %.3f' % (row, yhat[0]))
+yhat = model2.predict(asarray([row]))
+print('Input: %s, Predicted with XGBoost con tuning: %.3f' % (row, yhat[0]))
 
-
+# Resultados finales.
 print('MAE de Prophet 1: %.3f' % df_p['mae'])
 print('MAE de Prophet 2: %.3f' % df_p2['mae'])
 print('MAE de XGBoost 1: %.3f' % mae2)
 print('MAE de XGBoost 2: %.3f' % mae)
-
