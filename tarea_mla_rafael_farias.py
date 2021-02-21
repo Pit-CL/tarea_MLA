@@ -56,7 +56,7 @@ outliers = sns.boxplot(data=df['y'])
 plt.show()
 
 # Describo los datos.
-df.describe()
+describe = df.describe()
 
 # Le indicamos al modelos los días "importantes"
 dias_especiales = pd.DataFrame({
@@ -199,7 +199,7 @@ print('MAE de Prophet tuneado: %.3f' % df_p2['mae'])
 ###############################################################################
 # XGBoost 1 sin tuning.
 ###############################################################################
-# Transform a time series dataset into a supervised learning dataset
+# Series a aprendizaje supervisado.
 def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     n_vars = 1 if type(data) is list else data.shape[1]
     df = DataFrame(data)
@@ -218,154 +218,185 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     return agg.values
 
 
-# split a univariate dataset into train/test sets
+# train/test sets
 def train_test_split(data, n_test):
     return data[:-n_test, :], data[-n_test:, :]
 
 
-# fit an xgboost model and make a one step prediction
+# Fit y un paso de predicción.
 def xgboost_forecast(train, testX):
-    # transform list into array
+    # transformando listas en arreglos.
     train = asarray(train)
     # split into input and output columns
     trainX, trainy = train[:, :-1], train[:, -1]
-    # fit model
-    model = XGBRegressor(objective='reg:squarederror')
+    # fit al modelo.
+    model = XGBRegressor(objective='reg:squarederror', max_depth=2)
     model.fit(trainX, trainy)
-    # make a one-step prediction
+    # un paso de predicción.
     yhat = model.predict(asarray([testX]))
     return yhat[0]
 
 
-# walk-forward validation for univariate data
+# Walk-forward validación para la data sin variaciones.
 def walk_forward_validation(data, n_test):
     predictions = list()
-    # split dataset
+    # separando el dataset
     train, test = train_test_split(data, n_test)
-    # seed history with training dataset
+    # Creando history con los datos de entrenamiento.
     history = [x for x in train]
-    # step over each time-step in the test set
+    # Pasos de cada time-step el set de testeo.
     for i in range(len(test)):
-        # split test row into input and output columns
+        # separar el testeo entre input y output
         testX, testy = test[i, :-1], test[i, -1]
-        # fit model on history and make a prediction
+        # Fit al modelo en History y haciendo una predicción.
         yhat = xgboost_forecast(history, testX)
-        # store forecast in list of predictions
+        # Guardando el forecast en una lista de predicciones.
         predictions.append(yhat)
-        # add actual observation to history for the next loop
+        # agregando la obervación actual de history al siguiente loop.
         history.append(test[i])
-        # summarize progress
+        # Resumiendo el progreso.
         print('>expected=%.1f, predicted=%.1f' % (testy, yhat))
-    # estimate prediction error
+    # Estimando el error de la predicción.
     error = mean_absolute_error(test[:, -1], predictions)
     return error, test[:, -1], predictions
 
 
 # Pronosticando próximo día tomando en cuenta los 30 días anteriores.
 
-# load the dataset
-series2 = read_csv(path2, header=0, index_col=0)
-values2 = series2.values
+# Cargando el dataset.
+series = read_csv(path2, header=0, index_col=0)
+values = series.values
 
 # transform the time series data into supervised learning
-data = series_to_supervised(values2, n_in=6)
+data = series_to_supervised(values, n_in=6)
 
-# evaluate
-mae2, y2, yhat2 = walk_forward_validation(data, 30)
+# Evaluando.
+mae, y, yhat = walk_forward_validation(data, 30)
 
-# plot expected vs predicted
-pyplot.plot(y2, label='Expected')
-pyplot.plot(yhat2, label='Predicted')
+# Graficando esperado vs pronosticado.
+pyplot.plot(y, label='Esperado')
+pyplot.plot(yhat, label='Pronosticado')
 pyplot.title('Predicción Modelo XGBoost sin tuning')
 pyplot.legend()
 pyplot.show()
 
 # Pronosticando próximo día tomando en cuenta los 10 días anteriores.
-# load the dataset
-series2 = read_csv(path2, header=0, index_col=0)
-values2 = series2.values
+# Cargando el dataset
+series = read_csv(path2, header=0, index_col=0)
+values = series.values
 
-# transform the time series data into supervised learning
-train2 = series_to_supervised(values2, n_in=30)
+# Transformando las series de tiempo en aprendizaje supervisado.
+train = series_to_supervised(values, n_in=30)
 
-# split into input and output columns
-trainX, trainy = train2[:, :-1], train2[:, -1]
+# Separando entre input y outputs.
+trainX, trainy = train[:, :-1], train[:, -1]
 
-# fit model
-model2 = XGBRegressor(objective='reg:squarederror')
+# Fit al modelo.
+model = XGBRegressor(objective='reg:squarederror', gpu_id=-1, max_depth=2)
 
-model2.fit(trainX, trainy)
+model.fit(trainX, trainy)
 
-# construct an input for a new prediction
-row = values2[-30:].flatten()
+# Input para la predicción.
+row = values[-30:].flatten()
 
-# make a one-step prediction
-yhat2 = model2.predict(asarray([row]))
-print('Input: %s, Predicted with XGBoost sin tuning: %.3f' % (row, yhat2[0]))
+# Un paso de predicción.
+yhat = model.predict(asarray([row]))
+print('Input: %s, Predicted with XGBoost sin tuning: %.3f' % (row, yhat[0]))
+
 
 ###############################################################################
 # XGBoost 2 con tuning.
 ###############################################################################
-# Buscamos los mejores hiperparámetros dentro del listado params.
-xgb = XGBRegressor(objective='reg:squarederror')
-
-params = {
-    'min_child_weight': [5, 10],
-    'gamma': [0.5, 1.5],
-    'subsample': [0.6, 0.8],
-    'colsample_bytree': [0.6, 0.8],
-    'max_depth': [5, 10],
-    'n_estimators': [1000, 3000]
-}
-
-param_comb = 10
-folds = 2
-skf = StratifiedKFold(n_splits=folds, shuffle=True)
-random_search = RandomizedSearchCV(xgb, param_distributions=params,
-                                   n_iter=param_comb,
-                                   scoring='neg_mean_absolute_error',
-                                   n_jobs=4,
-                                   cv=skf.split(trainX, trainy),
-                                   verbose=3)
-
-random_search.fit(trainX, trainy)
-
-print(random_search.cv_results_)
-print('\n Best estimator:')
-print(random_search.best_estimator_)
-print('\n Best normalized gini score for %d-fold search with %d parameter '
-      'combinations:' % (folds, param_comb))
-print(random_search.best_score_ * 2 - 1)
-print('\n Best hyperparameters:')
-print(random_search.best_params_)
-results = pd.DataFrame(random_search.cv_results_)
+# # Buscamos los mejores hiperparámetros dentro del listado params.
+# xgb = XGBRegressor(objective='reg:squarederror', gpu_id=-1)
+#
+# params = {
+#     'min_child_weight': [5, 10, 40, 60],
+#     'gamma': [0.5, 1.5, 3, 6],
+#     'subsample': [0.6, 0.8, 1],
+#     'colsample_bytree': [0.6, 0.8, 1],
+#     'max_depth': [10, 20, 30],
+#     'learning_rate': [0.3, 0.5, 0.8, 1],
+#     'objective': ['reg:squarederror'],
+# }
+#
+# param_comb = 100
+# folds = 2
+# skf = StratifiedKFold(n_splits=folds, shuffle=True)
+# random_search = RandomizedSearchCV(xgb, param_distributions=params,
+#                                    n_iter=param_comb,
+#                                    scoring='neg_mean_absolute_error',
+#                                    n_jobs=4,
+#                                    cv=skf.split(trainX, trainy),
+#                                    verbose=3)
+#
+# random_search.fit(trainX, trainy)
+#
+# print(random_search.cv_results_)
+# print('\n Best estimator:')
+# print(random_search.best_estimator_)
+# print(
+#     '\n Best normalized gini score for %d-fold search with %d parameter combinations:' % (
+#     folds, param_comb))
+# print(random_search.best_score_ * 2 - 1)
+# print('\n Best hyperparameters:')
+# print(random_search.best_params_)
+# results = pd.DataFrame(random_search.cv_results_)
 
 
 # Se crea el nuevo modelo con los hiperparámetros encontrados.
 def xgboost_forecast(train, testX):
-    # transform list into array
+    # transformando lista en arreglo.
     train = asarray(train)
     # split into input and output columns
     trainX, trainy = train[:, :-1], train[:, -1]
     # fit model
-    model = XGBRegressor(objective='reg:squarederror', n_estimators=3000,
-                         max_depth=40, booster='gbtree',
-                         TREE_METHOD='gpu_hist')
+    model = XGBRegressor(base_score=0.5, booster='gbtree', colsample_bylevel=1,
+                         colsample_bynode=1, colsample_bytree=1, gamma=0.5,
+                         gpu_id=-1,
+                         importance_type='gain', interaction_constraints='',
+                         learning_rate=0.3, max_delta_step=0, max_depth=10,
+                         min_child_weight=40,
+                         monotone_constraints='()',
+                         n_estimators=100, n_jobs=16, num_parallel_tree=1,
+                         random_state=0,
+                         reg_alpha=0, reg_lambda=1, scale_pos_weight=1,
+                         subsample=1,
+                         tree_method='exact', validate_parameters=1,
+                         verbosity=None, objective='reg:squarederror',
+                         eval_metric='mae')
     model.fit(trainX, trainy)
     # make a one-step prediction
     yhat = model.predict(asarray([testX]))
     return yhat[0]
 
 
-# Graficando.
+# Predicción.
 
-# transform the time series data into supervised learning
+model2 = XGBRegressor(base_score=0.5, booster='gbtree', colsample_bylevel=1,
+                      colsample_bynode=1, colsample_bytree=1, gamma=0.5,
+                      gpu_id=-1,
+                      importance_type='gain', interaction_constraints='',
+                      learning_rate=0.3, max_delta_step=0, max_depth=10,
+                      min_child_weight=40,
+                      monotone_constraints='()',
+                      n_estimators=100, n_jobs=16, num_parallel_tree=1,
+                      random_state=0,
+                      reg_alpha=0, reg_lambda=1, scale_pos_weight=1,
+                      subsample=1,
+                      tree_method='exact', validate_parameters=1,
+                      verbosity=None, objective='reg:squarederror',
+                      eval_metric='mae')
+
+model2.fit(trainX, trainy)
+series2 = read_csv(path2, header=0, index_col=0)
+values2 = series2.values
 data = series_to_supervised(values2, n_in=6)
-mae, y, yhat = walk_forward_validation(data, 30)
+mae2, y2, yhat2 = walk_forward_validation(data, 30)
 
 # plot expected vs predicted
-pyplot.plot(y, label='Expected')
-pyplot.plot(yhat, label='Predicted')
+pyplot.plot(y2, label='Esperado')
+pyplot.plot(yhat2, label='Pronosticado')
 pyplot.title('Predicción Modelo XGBoost tuneado')
 pyplot.legend()
 pyplot.show()
@@ -373,15 +404,15 @@ pyplot.show()
 # Pronosticando próximo día tomando en cuenta los 30 días anteriores y el mejor
 # modelo encontrado.
 
-# construct an input for a new prediction
+# Input para la nueva predicción.
 row = values2[-30:].flatten()
 
-# make a one-step prediction
+# Un paso de predicción.
 yhat = model2.predict(asarray([row]))
 print('Input: %s, Predicted with XGBoost con tuning: %.3f' % (row, yhat[0]))
 
 # Resultados finales.
-print('MAE de Prophet 1: %.3f' % df_p['mae'])
-print('MAE de Prophet 2: %.3f' % df_p2['mae'])
-print('MAE de XGBoost 1: %.3f' % mae2)
-print('MAE de XGBoost 2: %.3f' % mae)
+print('MAE de Prophet Default: %.3f' % df_p['mae'])
+print('MAE de Prophet Hiper: %.3f' % df_p2['mae'])
+print('MAE de XGBoost Default: %.3f' % mae)
+print('MAE de XGBoost Hiper: %.3f' % mae2)
